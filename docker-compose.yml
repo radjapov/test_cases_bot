@@ -1,0 +1,25 @@
+services:
+  bot:
+    build:
+      context: .
+    container_name: test_case_generator_bot
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src
+      - db_data:/app
+    restart: unless-stopped
+    command: sleep 3600
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: test_case_generator_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+volumes:
+  db_data:
+  redis_data:
