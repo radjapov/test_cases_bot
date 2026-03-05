@@ -93,7 +93,10 @@ async def handle_text_for_generation(message: Message, state: FSMContext, sessio
         await message.answer_document(input_file)
     else:
         # Send the full text and the file
-        await processing_message.edit_text(generated_text, parse_mode="Markdown")
+        try:
+            await processing_message.edit_text(generated_text, parse_mode="Markdown")
+        except Exception:
+            await processing_message.edit_text(generated_text)
         await message.answer_document(input_file, caption="Here is your file.")
 
 
@@ -151,7 +154,10 @@ async def handle_endpoint_for_generation(message: Message, state: FSMContext, se
         await message.answer_document(input_file)
     else:
         # Send the full text and the file
-        await processing_message.edit_text(generated_text, parse_mode="Markdown")
+        try:
+            await processing_message.edit_text(generated_text, parse_mode="Markdown")
+        except Exception:
+            await processing_message.edit_text(generated_text)
         await message.answer_document(input_file, caption="Here is your file.")
 
 

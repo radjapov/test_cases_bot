@@ -12,7 +12,7 @@ GENERATION_CONFIG = types.GenerateContentConfig(
     temperature=0.4,
     top_p=1,
     top_k=32,
-    max_output_tokens=4096,
+    max_output_tokens=16384,
     safety_settings=[
         types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
         types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_MEDIUM_AND_ABOVE"),
