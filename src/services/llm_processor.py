@@ -1,29 +1,24 @@
 import logging
-import google.genai as genai
+from google import genai
+from google.genai import types
 from src.config import settings
 
-# Configure the Gemini API
-genai.configure(api_key=settings.gemini_api_key)
+# Initialize the Gemini client (new SDK)
+client = genai.Client(api_key=settings.gemini_api_key)
 
-generation_config = {
-    "temperature": 0.4,
-    "top_p": 1,
-    "top_k": 32,
-    "max_output_tokens": 4096,
-}
+MODEL_NAME = "gemini-2.0-flash-001"
 
-safety_settings = [
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-]
-
-# Initialize the model
-llm = genai.GenerativeModel(
-    model_name="models/gemini-pro-latest",
-    generation_config=generation_config,
-    safety_settings=safety_settings
+GENERATION_CONFIG = types.GenerateContentConfig(
+    temperature=0.4,
+    top_p=1,
+    top_k=32,
+    max_output_tokens=4096,
+    safety_settings=[
+        types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+        types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+        types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+        types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+    ]
 )
 
 def get_template_prompt(template_type: str) -> str:
@@ -197,7 +192,9 @@ async def _critic_pass(original_text: str, generated_cases: str, output_format: 
     logging.info(f"Performing critic pass for test cases in '{output_format}' format.")
 
     try:
-        response = await llm.generate_content_async(prompt)
+        response = await client.aio.models.generate_content(
+            model=MODEL_NAME, contents=prompt, config=GENERATION_CONFIG
+        )
         # Clean up the response text from potential markdown code blocks
         refined_text = response.text
         if output_format == 'json' and refined_text.startswith("```json"):
@@ -226,7 +223,9 @@ async def _initial_generation_pass(raw_text: str, output_format: str, template_t
     logging.info(f"Generating test cases with format '{output_format}' and template '{template_type}'.")
 
     try:
-        response = await llm.generate_content_async(prompt)
+        response = await client.aio.models.generate_content(
+            model=MODEL_NAME, contents=prompt, config=GENERATION_CONFIG
+        )
         # Clean up the response text from potential markdown code blocks
         generated_text = response.text
         if output_format == 'json' and generated_text.startswith("```json"):
@@ -329,7 +328,9 @@ async def _endpoint_critic_pass(
     logging.info(f"Performing critic pass for endpoint '{method} {endpoint}'.")
 
     try:
-        response = await llm.generate_content_async(prompt)
+        response = await client.aio.models.generate_content(
+            model=MODEL_NAME, contents=prompt, config=GENERATION_CONFIG
+        )
         # Clean up the response text
         refined_text = response.text.strip()
         if refined_text.startswith(f"```{output_format}"):
@@ -353,7 +354,9 @@ async def _initial_endpoint_generation_pass(
     logging.info(f"Generating test cases for endpoint '{method} {endpoint}'.")
 
     try:
-        response = await llm.generate_content_async(prompt)
+        response = await client.aio.models.generate_content(
+            model=MODEL_NAME, contents=prompt, config=GENERATION_CONFIG
+        )
         # Clean up the response text
         generated_text = response.text.strip()
         if generated_text.startswith(f"```{output_format}"):

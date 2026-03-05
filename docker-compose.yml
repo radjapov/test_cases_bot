@@ -9,7 +9,6 @@ services:
       - ./src:/app/src
       - db_data:/app
     restart: unless-stopped
-    command: sleep 3600
     depends_on:
       - redis
 
