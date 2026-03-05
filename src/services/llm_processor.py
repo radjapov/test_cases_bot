@@ -6,7 +6,7 @@ from src.config import settings
 # Initialize the Gemini client (new SDK)
 client = genai.Client(api_key=settings.gemini_api_key)
 
-MODEL_NAME = "gemini-2.0-flash-001"
+MODEL_NAME = "gemini-2.5-flash"
 
 GENERATION_CONFIG = types.GenerateContentConfig(
     temperature=0.4,
