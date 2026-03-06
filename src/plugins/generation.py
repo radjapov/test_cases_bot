@@ -15,46 +15,81 @@ router = Router()
 
 
 @router.message(Command("new"))
-async def handle_new_command(message: Message, state: FSMContext):
+@router.callback_query(F.data == "start_generation")
+async def handle_new_command(event: Message | CallbackQuery, state: FSMContext):
     """Handler for the /new command, starts the generation process."""
-    await message.answer("""📝 **Ready to generate!**
+    text = """📝 **Ready to generate!**
 
-Please send me the raw text, user story, or feature description you want to turn into test cases.""", parse_mode="Markdown")
-    await state.set_state(GenState.waiting_for_text)
+Choose the generation mode:"""
+    kb = inline.get_session_mode_keyboard()
+    if isinstance(event, CallbackQuery):
+        await event.message.answer(text, parse_mode="Markdown", reply_markup=kb)
+        await event.answer()
+    else:
+        await event.answer(text, parse_mode="Markdown", reply_markup=kb)
+    await state.set_state(GenState.choosing_mode)
+    await state.update_data(pending_type="text")
 
 
 @router.message(Command("analyze_endpoint"))
-async def handle_analyze_endpoint_command(message: Message, state: FSMContext):
+@router.callback_query(F.data == "start_endpoint_analysis")
+async def handle_analyze_endpoint_command(event: Message | CallbackQuery, state: FSMContext):
     """Handler for the /analyze_endpoint command."""
-    await message.answer("""🔬 **Ready to analyze an endpoint!**
+    text = """🔬 **Ready to analyze an endpoint!**
 
-Please send me the endpoint details in the following format:
-`METHOD /path/to/endpoint
-{
-  "key": "value"
-}`
-For example:
-`POST /users
-{
-  "name": "John Doe",
-  "email": "john.doe@example.com"
-}`""", parse_mode="Markdown")
-    await state.set_state(GenState.waiting_for_endpoint_text)
+Choose the generation mode:"""
+    kb = inline.get_session_mode_keyboard()
+    if isinstance(event, CallbackQuery):
+        await event.message.answer(text, parse_mode="Markdown", reply_markup=kb)
+        await event.answer()
+    else:
+        await event.answer(text, parse_mode="Markdown", reply_markup=kb)
+    await state.set_state(GenState.choosing_mode)
+    await state.update_data(pending_type="endpoint")
+
+
+@router.callback_query(F.data.in_({"mode_fresh", "mode_context"}), GenState.choosing_mode)
+async def handle_mode_choice(callback: CallbackQuery, state: FSMContext):
+    """Handles the Fresh/Context mode selection."""
+    use_history = callback.data == "mode_context"
+    data = await state.get_data()
+    pending_type = data.get("pending_type", "text")
+    await state.update_data(use_history=use_history)
+
+    mode_label = "🔗 with context" if use_history else "🆕 fresh start (no history)"
+
+    if pending_type == "text":
+        await callback.message.answer(
+            f"Got it! Mode: **{mode_label}**\n\nNow send me the raw text, user story, or feature description.",
+            parse_mode="Markdown"
+        )
+        await state.set_state(GenState.waiting_for_text)
+    else:
+        await callback.message.answer(
+            f"Got it! Mode: **{mode_label}**\n\nNow send me the endpoint details:\n`METHOD /path/to/endpoint`\n`{{...json body...}}`",
+            parse_mode="Markdown"
+        )
+        await state.set_state(GenState.waiting_for_endpoint_text)
+    await callback.answer()
 
 
 @router.message(GenState.waiting_for_text, F.text)
 async def handle_text_for_generation(message: Message, state: FSMContext, session: AsyncSession):
     """Receives the text from the user and starts the generation."""
+    data = await state.get_data()
+    use_history = data.get("use_history", True)
     await state.clear()
-    
+
     # Notify the user that the process has started
     processing_message = await message.answer("⏳ Processing your text... This might take a moment.")
 
     user = await crud.get_or_create_user(session, message.from_user.id)
 
-    # Get recent memory
-    history = await memory_repository.get_recent_memory(session, user.id, limit=20)
-    
+    # Get recent memory only if context mode is enabled
+    history = None
+    if use_history:
+        history = await memory_repository.get_recent_memory(session, user.id, limit=20)
+
     # Generate test cases
     generated_text = await llm_processor.generate_test_cases(
         raw_text=message.text,
@@ -80,7 +115,7 @@ async def handle_text_for_generation(message: Message, state: FSMContext, sessio
         request=message.text,
         response=generated_text
     )
-    
+
     # --- Send the result ---
     file_content = generated_text.encode('utf-8')
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -92,7 +127,6 @@ async def handle_text_for_generation(message: Message, state: FSMContext, sessio
         await processing_message.edit_text(summary)
         await message.answer_document(input_file)
     else:
-        # Send the full text and the file
         try:
             await processing_message.edit_text(generated_text, parse_mode="Markdown")
         except Exception:
@@ -103,6 +137,8 @@ async def handle_text_for_generation(message: Message, state: FSMContext, sessio
 @router.message(GenState.waiting_for_endpoint_text, F.text)
 async def handle_endpoint_for_generation(message: Message, state: FSMContext, session: AsyncSession):
     """Receives the endpoint text from the user and starts the generation."""
+    data = await state.get_data()
+    use_history = data.get("use_history", True)
     await state.clear()
 
     parsed_data = parser.parse_endpoint_string(message.text)
@@ -111,7 +147,7 @@ async def handle_endpoint_for_generation(message: Message, state: FSMContext, se
         return
 
     method, endpoint, body = parsed_data
-    
+
     processing_message = await message.answer(f"🔬 Analyzing `{method} {endpoint}`...")
 
     user = await crud.get_or_create_user(session, message.from_user.id)
@@ -130,10 +166,10 @@ async def handle_endpoint_for_generation(message: Message, state: FSMContext, se
         raw_text=message.text,
         generated_test_cases=generated_text,
         output_format=user.output_format,
-        template_type="api-first"  # Force api-first for this feature
+        template_type="api-first"
     )
-    
-    # Save to conversation memory
+
+    # Save to conversation memory (always, regardless of mode)
     await memory_repository.save_to_memory(
         session=session,
         user_id=user.id,
@@ -153,7 +189,6 @@ async def handle_endpoint_for_generation(message: Message, state: FSMContext, se
         await processing_message.edit_text(summary)
         await message.answer_document(input_file)
     else:
-        # Send the full text and the file
         try:
             await processing_message.edit_text(generated_text, parse_mode="Markdown")
         except Exception:
@@ -161,16 +196,34 @@ async def handle_endpoint_for_generation(message: Message, state: FSMContext, se
         await message.answer_document(input_file, caption="Here is your file.")
 
 
+@router.callback_query(F.data == "clear_context")
+@router.message(Command("clear_context"))
+async def handle_clear_context(event: Message | CallbackQuery, session: AsyncSession):
+    """Clears the user's conversation history."""
+    is_callback = isinstance(event, CallbackQuery)
+    user_id = event.from_user.id
+
+    user = await crud.get_or_create_user(session, user_id)
+    await memory_repository.clear_memory(session, user.id)
+
+    text = "🧹 **Context cleared!** Your conversation history has been erased. The next generation will start fresh."
+    if is_callback:
+        await event.message.answer(text, parse_mode="Markdown")
+        await event.answer("Context cleared!")
+    else:
+        await event.answer(text, parse_mode="Markdown")
+
+
 @router.callback_query(F.data == "view_history")
 @router.message(Command("history"))
 async def handle_history_command(event: Message | CallbackQuery, session: AsyncSession):
     """Displays the user's last 5 generations."""
-    
+
     is_callback = isinstance(event, CallbackQuery)
     user_id = event.from_user.id
-    
+
     generations = await crud.get_user_generations(session, user_id, limit=5)
-    
+
     if not generations:
         answer_text = "You have no generation history yet. Use /new to start."
         if is_callback:
@@ -179,7 +232,7 @@ async def handle_history_command(event: Message | CallbackQuery, session: AsyncS
         else:
             await event.answer(answer_text)
         return
-        
+
     response_text = "📜 **Your Last 5 Generations:**\n\n"
     for i, gen in enumerate(generations, 1):
         # Truncate raw_text for display
@@ -198,12 +251,12 @@ async def handle_history_command(event: Message | CallbackQuery, session: AsyncS
 @router.message(Command("export"))
 async def handle_export_command(event: Message | CallbackQuery, session: AsyncSession):
     """Exports the last generation as a file."""
-    
+
     is_callback = isinstance(event, CallbackQuery)
     user_id = event.from_user.id
-    
+
     last_gen = await crud.get_last_generation(session, user_id)
-    
+
     if not last_gen:
         answer_text = "You have no generation history to export."
         if is_callback:
@@ -214,9 +267,9 @@ async def handle_export_command(event: Message | CallbackQuery, session: AsyncSe
 
     file_content = last_gen.generated_test_cases.encode('utf-8')
     file_name = f"test_cases_{last_gen.id}.{last_gen.output_format}"
-    
+
     input_file = BufferedInputFile(file_content, filename=file_name)
-    
+
     if is_callback:
         await event.message.answer_document(input_file, caption=f"Here are your test cases from {last_gen.created_at.strftime('%Y-%m-%d %H:%M')}.")
         await event.answer("File sent!")

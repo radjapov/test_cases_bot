@@ -1,5 +1,5 @@
 from typing import List
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models import ConversationHistory, User
 
@@ -25,3 +25,11 @@ async def get_recent_memory(session: AsyncSession, user_id: int, limit: int = 20
     )
     result = await session.execute(stmt)
     return result.scalars().all()
+
+
+async def clear_memory(session: AsyncSession, user_id: int):
+    """Deletes all conversation history for a user."""
+    stmt = delete(ConversationHistory).where(ConversationHistory.user_id == user_id)
+    await session.execute(stmt)
+    await session.commit()
+

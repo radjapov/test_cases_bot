@@ -134,6 +134,8 @@ Example:
     prompt = f"""
 You are an expert QA architect. Your task is to convert a raw text description of a feature into a structured set of test cases.
 
+**IMPORTANT: Write ALL test case content in RUSSIAN language.** Only keep technical terms, HTTP methods, field names, and code snippets in their original form.
+
 {history_prompt}
 
 **Output Format:**
@@ -265,6 +267,8 @@ def get_endpoint_prompt(output_format: str, method: str, endpoint: str, body: di
 
     prompt = f"""
 You are an expert QA automation engineer. Your task is to generate a comprehensive set of test cases for a given API endpoint.
+
+**IMPORTANT: Write ALL test case content in RUSSIAN language.** Only keep technical terms, HTTP methods, field names, status codes, and code snippets in their original form.
 
 **Output Format:**
 Respond in {output_format}. Ensure the response is a single, valid {output_format} text.

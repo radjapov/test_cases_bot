@@ -39,5 +39,15 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     builder.add(InlineKeyboardButton(text="📝 Template", callback_data="open_template_menu"))
     builder.add(InlineKeyboardButton(text="📚 History", callback_data="view_history"))
     builder.add(InlineKeyboardButton(text="📄 Export Last", callback_data="export_last"))
-    builder.adjust(2, 2, 2)
+    builder.add(InlineKeyboardButton(text="🧹 Clear Context", callback_data="clear_context"))
+    builder.adjust(2, 2, 2, 1)
+    return builder.as_markup()
+
+
+def get_session_mode_keyboard() -> InlineKeyboardMarkup:
+    """Keyboard to choose whether to use conversation history or start fresh."""
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(text="🆕 Fresh start (no history)", callback_data="mode_fresh"))
+    builder.add(InlineKeyboardButton(text="🔗 With context (use history)", callback_data="mode_context"))
+    builder.adjust(1)
     return builder.as_markup()
